@@ -384,6 +384,27 @@ EOF
     fi
 }
 
+plugin_status() {
+    docker plugin ls --format '{{ .PluginReference }} {{ .Enabled }} {{ .ID }}' |
+        grep $PLUGIN_NAME
+}
+
+plugin_id() {
+    echo $(plugin_status) | cut -d' ' -f3
+}
+
+plugin_enabled() {
+    [ "$(echo $(plugin_status) | cut -d' ' -f2)" = "true" ]
+}
+
+check_plugin_running() {
+    if [ -z "$(plugin_id)" ] ; then
+        return 1
+    elif ! plugin_enabled ; then
+        return 2
+    fi
+}
+
 # Detect the current bridge/datapath state. When invoked, the values of
 # $BRIDGE and $DATAPATH are expected to be distinct. $BRIDGE_TYPE and
 # $DATAPATH are set correctly on success; failure indicates that the
@@ -1299,7 +1320,11 @@ launch() {
 stop() {
     util_op remove-plugin-network weave || true
     warn_if_stopping_proxy_in_env
-    docker stop $CONTAINER_NAME >/dev/null 2>&1 || echo "Weave is not running." >&2
+    if plugin_enabled; then
+        docker plugin disable $(plugin_id) >/dev/null 2>&1
+    else
+        docker stop $CONTAINER_NAME >/dev/null 2>&1
+    fi || echo "Weave is not running." >&2
     # In case user has upgraded from <v2.0 and left old containers running
     docker stop $OLD_PLUGIN_CONTAINER_NAME >/dev/null 2>&1 || true
     docker stop $OLD_PROXY_CONTAINER_NAME >/dev/null 2>&1 || true
@@ -1577,6 +1602,7 @@ case "$COMMAND" in
         for NAME in $CONTAINER_NAME $OLD_PROXY_CONTAINER_NAME $OLD_PLUGIN_CONTAINER_NAME ; do
             docker rm -f $NAME >/dev/null 2>&1 || true
         done
+        docker plugin rm $(plugin_id) >/dev/null 2>&1 || true
         protect_against_docker_hang
         VOLUME_CONTAINERS=$(docker ps -qa --filter label=weavevolumes)
         [ -n "$VOLUME_CONTAINERS" ] && docker rm -v $VOLUME_CONTAINERS  >/dev/null 2>&1 || true
