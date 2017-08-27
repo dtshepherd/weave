@@ -1606,7 +1606,16 @@ case "$COMMAND" in
         protect_against_docker_hang
         VOLUME_CONTAINERS=$(docker ps -qa --filter label=weavevolumes)
         [ -n "$VOLUME_CONTAINERS" ] && docker rm -v $VOLUME_CONTAINERS  >/dev/null 2>&1 || true
+        # Remove weave-kube weavedb stored on host mount point
+        #  hostPath - /var/lib/weave
+        #  mountPoint - /weavedb
+        #  dbPrefix - /weavedb/weave-net
         rm -f $HOST_ROOT/var/lib/weave/weave-netdata.db >/dev/null 2>&1 || true
+        # Remove net-plugin weavedb stored on host volume bind mount
+        #  Host - /
+        #  Container - /host
+        #  dbPrefix - /host//var/lib/weave
+        rm -f $HOST_ROOT/var/lib/weave/weavedata.db >/dev/null 2>&1 || true
         destroy_bridge
         for LOCAL_IFNAME in $(ip link show | grep v${CONTAINER_IFNAME}pl | cut -d ' ' -f 2 | tr -d ':') ; do
             ip link del ${LOCAL_IFNAME%@*} >/dev/null 2>&1 || true
